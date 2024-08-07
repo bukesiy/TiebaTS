@@ -13,37 +13,50 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4.1.1
         with:
           submodules: 'recursive'
           fetch-depth: 0
-      - name: Setup JDK 11
-        uses: actions/setup-java@v1
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4.0.0
         with:
-          java-version: 11
-      - name: Retrieve version
-        run: |
-          echo VERSION=$(echo ${{ github.event.head_commit.id }} | head -c 10) >> $GITHUB_ENV
+          java-version: 17
+          distribution: 'temurin'
+
       - name: Build with Gradle
-        run: bash ./gradlew -PappVerName=${{ env.VERSION }} assembleRelease
+        run: bash ./gradlew assembleRelease
+
       - name: Sign Android release
         if: success()
         id: sign
         uses: r0adkll/sign-android-release@v1
         env:
-          BUILD_TOOLS_VERSION: "31.0.0"
+          BUILD_TOOLS_VERSION: "33.0.2"
         with:
           releaseDirectory: app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEY }}
           alias: ${{ secrets.ALIAS }}
           keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Retrieve filename
+        if: success()
+        run: echo "FILENAME=$(basename ${{ steps.sign.outputs.signedReleaseFile }})" >> $GITHUB_ENV
+        shell: bash
+
       - name: Upload built apk
         if: success()
-        uses: actions/upload-artifact@v2
+        id: upload
+        uses: actions/upload-artifact@v4
         with:
-          name: TS_${{ env.VERSION }}.apk
+          name: ${{ env.FILENAME }}
           path: ${{ steps.sign.outputs.signedReleaseFile }}
+
+      - name: Write job summary
+        if: success()
+        run: echo "### [下载链接](${{ steps.upload.outputs.artifact-url }})" >> $GITHUB_STEP_SUMMARY
+
       - name: Send commit to telegram
         uses: appleboy/telegram-action@master
         with:
@@ -61,7 +74,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.event.head_commit.message, '[skip ci]') }}
     steps:
-      - uses: actions/checkout@v2
       - name: Send commit to telegram
         uses: appleboy/telegram-action@master
         with:
